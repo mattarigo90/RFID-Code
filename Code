@@ -1,0 +1,208 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Servo.h>
+// Define pin numbers for components
+#define SS_PIN 10
+#define RST_PIN 9
+#define LED_G 5 // Green LED pin
+#define LED_R 4 // Red LED pin
+#define BUZZER 2 // Buzzer pin
+
+// Create instances of libraries
+MFRC522 mfrc522(SS_PIN, RST_PIN); // Create RC522 instance
+Servo myServo; // Define servo name
+
+// Define a class for a person
+class Person {
+private:
+  String name;
+  bool isStudent;
+  bool isResident;
+
+public:
+  // Setter methods for person attributes
+  void setName(const String &n) {
+    name = n;
+  }
+
+  void setIsStudent(bool s) {
+    isStudent = s;
+  }
+
+  void setIsResident(bool r) {
+    isResident = r;
+  }
+
+  // Getter methods for person attributes
+  String getName() {
+    return name;
+  }
+
+  bool getIsStudent() {
+    return isStudent;
+  }
+
+  bool getIsResident() {
+    return isResident;
+  }
+};
+
+Person person; // Create an instance of Person
+int currentPerson; // Track current person
+int mealCount[3]; // Array to track meal count for individuals
+
+// Function to set default person attributes
+void Default() {
+  person.setName("Unknown");
+  person.setIsStudent(false);
+  person.setIsResident(false);
+  currentPerson = 0;
+}
+
+void setup() {
+  // Initialize serial communication and components
+  Serial.begin(9600);   // Initiate a serial communication
+  SPI.begin();      // Initiate  SPI bus
+  mfrc522.PCD_Init();   // Initiate RC522
+  myServo.attach(3); //servo pin
+  myServo.write(0); //servo start position
+  pinMode(LED_G, OUTPUT);
+  pinMode(LED_R, OUTPUT);
+  pinMode(BUZZER, OUTPUT);
+  noTone(BUZZER);
+  Serial.println("Put your card to the reader...");
+  Serial.println();
+  
+  // Set initial meal counts and default person attributes
+  mealCount[1] = 2;
+  mealCount[2] = 0;
+  Default();
+}
+
+void loop() {
+  // Check if a new card is present
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  // Read card serial data
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+
+  // Get UID tag information and show on serial moniter
+  Serial.print("UID tag :");
+  String content = "";
+  for (byte i = 0; i < mfrc522.uid.size; i++) {
+    Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
+    //number to print is only one digit prepend blank AND 0 otherwise
+    //only blank
+    Serial.print(mfrc522.uid.uidByte[i], HEX);
+    // print the number in hexadecimal notation
+
+    // do the same thing, except add to a string instead of printing	
+    content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
+    content.concat(String(mfrc522.uid.uidByte[i], HEX));
+  }
+  Serial.println();
+  content.toUpperCase();
+
+  // Identify persons based on card UID
+  if (content.substring(1) == "XX XX XX XX") { //change here the UID of the card/cards that you want to give access
+    person.setName("Person 1");
+    person.setIsStudent(true);
+    person.setIsResident(true);
+    currentPerson = 1;
+  }
+
+  if (content.substring(1) == "XX XX XX XX") { //change here the UID of the card/cards that you want to give access
+    person.setName("Person 2");
+    person.setIsStudent(true);
+    person.setIsResident(false);
+    currentPerson = 2;
+  }
+
+  // Check access for different locations (Uncomment which location you want to test)
+  
+  recCenterAccess();
+  // residenceHallAccess();
+  // diningHallAccess();
+
+  Default(); // Reset to default after checking access
+}
+
+// Check access to the recreation center
+void recCenterAccess() {
+  printInfo(); // Display person information
+  if (person.getIsStudent() == true) {
+    openDoor(); // Open door if person is a student
+  } else {
+    denyAccess(); // Deny access otherwise
+  }
+}
+
+// Check access to the residence hall
+void residenceHallAccess() {
+  printInfo(); // Display person information
+  if (person.getIsResident() == true) {
+    openDoor(); // Open door if person is a resident
+  } else {
+    denyAccess(); // Deny access otherwise
+  }
+}
+
+// Check access to the dining hall
+void diningHallAccess() {
+  printInfo(); // Display person information
+  if (mealCount[currentPerson] > 0) {
+    // Grant access if meal count is available
+    mealCount[currentPerson]--;
+    Serial.println("Remaining Meal Count: " + String(mealCount[currentPerson]));
+    Serial.println("Authorized access");
+    Serial.println();
+    delay(500);
+    digitalWrite(LED_G, HIGH);
+    tone(BUZZER, 500);
+    delay(300);
+    noTone(BUZZER);
+    delay(2000);
+    digitalWrite(LED_G, LOW);
+  } else {
+    // Deny access if no meal swipes remaining
+    Serial.println("No Meal Swipes Remaining");
+    denyAccess();
+  }
+}
+
+// Display person information
+void printInfo() {
+  Serial.println("Name: " + person.getName());
+  Serial.println("Is Student: " + String(person.getIsStudent()));
+  Serial.println("Is Resident: " + String(person.getIsResident()));
+}
+
+// Function to open the door
+void openDoor(){
+  Serial.println("Authorized access");
+  Serial.println();
+  delay(500);
+  digitalWrite(LED_G, HIGH);
+  tone(BUZZER, 500);
+  delay(300);
+  noTone(BUZZER);
+  myServo.write(180);
+  delay(2000);
+  myServo.write(0);
+  digitalWrite(LED_G, LOW);
+}
+
+// Function to deny access
+void denyAccess() {
+  Serial.println("Access denied");
+  Serial.println();
+  digitalWrite(LED_R, HIGH);
+  tone(BUZZER, 300);
+  delay(1000);
+  digitalWrite(LED_R, LOW);
+  noTone(BUZZER);
+}
